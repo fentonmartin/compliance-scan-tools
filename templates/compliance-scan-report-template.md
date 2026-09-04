@@ -23,7 +23,7 @@
 | Scope | <SCOPE_DIRS> (exclusions: <EXCLUDED_PATHS>) |
 | Standards | <STANDARDS> |
 | Scan type | <SCAN_TYPE> |
-| Methodology version | compliance-scan-tools v1.1.0 (`compliance/scan-methodology.md`) |
+| Methodology version | CSCAN Tools v1.2.0 (`compliance/scan-methodology.md`) |
 | Evidence bundle | <EVIDENCE_DIR> (`cscan freeze/inventory/search` output + receipts) |
 
 ---
@@ -182,7 +182,7 @@ git rev-parse HEAD, git status --porcelain. -->
 
 ### Appendix D: Methodology Detail
 
-<!-- Reference: compliance/scan-methodology.md v1.1.0,
+<!-- Reference: compliance/scan-methodology.md (CSCAN Tools v1.2.0),
 plus any per-engagement deviations with rationale. -->
 
 ---

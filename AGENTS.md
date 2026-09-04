@@ -33,7 +33,7 @@ python tools/cscan.py validate --report <report>.md
 # leak-guard the kit itself (must print nothing; scope is content-only —
 # tools/cscan.py holds the intentional documented list, tests/ holds fixtures)
 grep -rniE "nds-by-nat|fayolearn|big-pickle" \
-  README.md compliance/ prompts/ templates/
+  README.md CONTRIBUTING.md compliance/ prompts/ templates/
 ```
 
 ## Cutting a release

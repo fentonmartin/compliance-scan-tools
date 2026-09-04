@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-09-04
+
+### Changed
+- **CSCAN Tools** is now the brand across the kit: README, agent prompt,
+  report template, tool `--version` output, and shims. The command stays
+  `cscan`; the repository name is unchanged.
+- Root README rewritten: hero + positioning, overview, "what it is not",
+  quick start with real commands, existence-protocol summary, `cscan`
+  command table, 4-step first-scan tutorial, annotated structure with
+  "why these names", roadmap, and acknowledgments.
+
+### Added
+- `CONTRIBUTING.md`: contribution paths, the five rules, dev loop, and
+  PR guidance — open source is a correction mechanism, documented as one.
+
 ## [1.1.0] - 2026-09-04
 
 ### Added
@@ -54,5 +69,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Every scan command now takes scope as a variable; methodology fails closed
   on copied scope (Rule 11).
 
+[1.2.0]: https://github.com/fentonmartin/compliance-scan-tools/releases/tag/v1.2.0
 [1.1.0]: https://github.com/fentonmartin/compliance-scan-tools/releases/tag/v1.1.0
 [1.0.0]: https://github.com/fentonmartin/compliance-scan-tools/releases/tag/v1.0.0

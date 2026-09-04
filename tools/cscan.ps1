@@ -1,4 +1,4 @@
-# PowerShell shim for the cscan evidence tool (Windows PowerShell 5.1+).
+# PowerShell shim for CSCAN Tools (Windows PowerShell 5.1+).
 # Usage: .\tools\cscan.ps1 <freeze|inventory|search|scaffold|validate> [options]
 $ErrorActionPreference = 'Stop'
 $script = Join-Path $PSScriptRoot 'cscan.py'

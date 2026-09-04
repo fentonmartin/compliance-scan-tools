@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cscan — evidence collector and report helper for compliance-scan-tools.
+"""CSCAN Tools — evidence collector and report helper.
 
 Stdlib-only (Python 3.8+). No third-party dependencies, so it runs on any
 project checkout with Python and git. Every subcommand writes machine- and
@@ -30,7 +30,7 @@ import re
 import subprocess
 import sys
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 TEMPLATE_REL = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "..",
@@ -487,9 +487,9 @@ def cmd_validate(args):
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="cscan",
-        description="Evidence collector and report helper for compliance-scan-tools.",
+        description="CSCAN Tools evidence collector and report helper.",
     )
-    parser.add_argument("--version", action="version", version="cscan " + VERSION)
+    parser.add_argument("--version", action="version", version="CSCAN Tools " + VERSION)
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("freeze", help="record evidence-freeze point")

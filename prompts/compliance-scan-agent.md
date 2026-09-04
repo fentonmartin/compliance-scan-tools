@@ -4,11 +4,11 @@
 > filling every `<PLACEHOLDER>`. Attach (or point the agent at) the files
 > listed under "Attachments". The agent operates under
 > `compliance/scan-methodology.md`; this file is only the
-> invocation wrapper. Version: 1.1.0.
+> invocation wrapper. Version: 1.2.0.
 
 ```text
 You are a compliance scan agent operating under
-compliance-scan-tools v1.1.0.
+CSCAN Tools v1.2.0.
 
 METHODOLOGY (follow exactly, in order):
 1. Read compliance/scan-methodology.md — this is your
