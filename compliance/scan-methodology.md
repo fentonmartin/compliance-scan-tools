@@ -2,7 +2,7 @@
 type: topic
 title: Full Project Scan — Evidence-Based Audit Methodology
 status: active
-version: 1.1.0
+version: 1.3.0
 claim_type: reference
 subtype: reference
 updated: 2026-09-04
@@ -94,11 +94,16 @@ Deliver the report using templates/compliance-scan-report-template.md.
 
 The scan is done when **all** of these hold:
 
-- [ ] Phase 0 scope table is filled and authorized.
+- [ ] Phase 0 scope table is filled and authorized, including the
+      reachability declaration (which layers are in scope and whether the
+      framework/dependencies live in the scanned tree).
 - [ ] Phase 1 inventory counts reconcile with `git ls-files`.
 - [ ] Every in-scope commitment in `compliance/adr-compliance-matrix.md` has a
-      Phase 3 verdict of IMPLEMENTED / PARTIAL / NOT FOUND / UNCLEAR
-      with dated evidence.
+      Phase 3 verdict of IMPLEMENTED / PARTIAL / NOT FOUND (in scope) /
+      UNCLEAR with Scope checked + Search receipt + Confidence + dated evidence.
+- [ ] Every High/Critical finding quotes code that was actually read and
+      states a concrete impact scenario; leads-only findings are capped at
+      Medium with "requires verification".
 - [ ] Every Phase 4 check has either evidence or an explicit
       "not searched because …" statement.
 - [ ] The report validates: no hard-coded prior-engagement values,
@@ -215,8 +220,8 @@ about what "must" be there.
 | Verdict | Meaning | Minimum proof required |
 |---|---|---|
 | IMPLEMENTED / EXISTS | The behavior or artifact is present in the target at `<SCAN_END_COMMIT>` | Direct observation: quoted file content with `<path>:<line-range>` + commit + date. One sighting is enough — but cite the strongest (enforcement point, not a comment mentioning it). |
-| NOT FOUND / ABSENT | The behavior or artifact is absent from the search scope | A **search receipt**: every pattern tried (exact strings), every directory traversed with file/extension counts, the exact command + working directory + tool version, timestamp, exclusions honored, and the 0-match result. Absence is proven by the receipt, never by silence. |
-| UNCLEAR / NOT SEARCHED | No verdict is possible yet | An explicit statement of what was not searched and why (tool missing, path excluded, binary asset, time-box hit). UNCLEAR is a valid, reportable outcome. Guessing in either direction is a failed scan. |
+| NOT FOUND / ABSENT (in scope) | The behavior or artifact is absent **from a layer this scan can observe** | All of: (a) the control is expected to appear inside the declared scope — its providing layer (application code) is in the tree; (b) a **search receipt** (patterns, directories + counts, exact command + tool version, timestamp, exclusions, 0-match result); (c) the verdict is written qualified: **"NOT FOUND (in scope: `<X>`)"**. A bare grep-negative for a control that could live in the framework, a dependency, or the infrastructure is never NOT FOUND — see rule 6. |
+| UNCLEAR (out of scope / not searched) | No verdict is possible: the providing layer is outside the declared scope, or the search was never run | An explicit statement quoting the reachability declaration ("providing framework is an external dependency outside the tree") or the reason for no search (tool missing, path excluded, binary asset, time-box hit). UNCLEAR is a valid, reportable outcome. Guessing in either direction is a failed scan. |
 
 Rules:
 
@@ -241,6 +246,28 @@ Rules:
    files searched/skipped, match counts). Paste them into Appendix B.
    A finding whose receipt is missing is UNCLEAR until the search is
    re-run and recorded.
+6. **NOT FOUND is scoped; framework/infra absence is UNCLEAR.** Before
+   writing NOT FOUND, check the reachability declaration: is the
+   control's providing layer in the scanned tree? Controls backed by an
+   external framework, an unvendored dependency, or platform-owned
+   infrastructure (auth/session/MFA, field encryption, rate limiting,
+   tenant/site routing, managed backups, TLS termination — wherever they
+   are provided, not wherever they are named) are **UNCLEAR with the
+   reason**, never NOT FOUND and never "PARTIAL (gap)". PARTIAL is
+   reserved for controls partially implemented *inside* the scope.
+7. **Leads become findings only by reading.** A grep count, a TODO, a
+   suggestive flag (e.g. a permission-bypass option, a `print` call) is a
+   **lead**. Promoting it to a finding requires opening **at least one**
+   location and quoting the behavior that proves the impact. A finding
+   rated High or Critical additionally requires a concrete impact
+   scenario in plain language (who is affected, via which path, with what
+   consequence). Leads-only findings are capped at **Medium** and marked
+   "requires verification" — no exceptions for large counts. A thousand
+   unexamined hits are one lead, not one catastrophe.
+8. **Score with three numbers, not one ratio.** Report Implemented /
+   Unclear / Not-found counts separately. A single "X/31" ratio punishes
+   application-only scopes for framework-owned controls and reads as
+   failure where the honest reading is "not observable here".
 
 ---
 
@@ -259,10 +286,23 @@ Before opening any source file, fill in and freeze:
 |---|---|---|
 | Scan scope | Yes | `<SCOPE_DIRS>` — enumerate from `git ls-files`, see Phase 1. Do not invent directory names. |
 | Exclusions | Yes | `<EXCLUDED_PATHS>` — secret/key material, credential dumps, PII fixtures the engagement rules forbid opening. Name the rule source (e.g. engagement letter, security policy). |
+| Layers in scope | Yes | Which providing layers the scan can observe: application code / framework & third-party dependencies / infrastructure & runtime configuration. One row per layer: in scope or out of scope + why. |
+| Framework & dependencies | Yes | Do the framework and dependencies live **in the scanned tree** (vendored/monorepo), or **outside it** (imported package, platform service)? Record manifests observed (`package.json`, `requirements.txt`, `go.mod`, …) and the framework's entry points actually referenced (imports, SDK calls). |
+| Infrastructure & runtime | Yes | Is runtime config in scope (deploy manifests, IaC, gateway/proxy config, TLS termination, backup jobs)? If not, name where it lives and who owns it. |
 | Depth | Yes | Full (every tracked file) or Targeted (named subsystems + rationale) |
 | Scan type | Yes | `<SCAN_TYPE>` |
 | Authorization | Yes | Who requested this scan, when, and under what authority |
 | Standards referenced | Yes | `<STANDARDS>` |
+
+**Reachability declaration.** Before Phase 3, write one paragraph stating
+what this scan *can* observe: e.g. "application layer only — the web
+framework is an external dependency outside the tree; runtime/TLS/backup
+configuration is platform-owned and out of scope." Every verdict in
+Phase 3 is interpreted against this declaration. A control whose
+providing layer is outside the declared scope can never be NOT FOUND —
+it is UNCLEAR with the reason quoted from this declaration. This is the
+rule that prevents the most common systematic false positive: grading an
+application for its framework's homework.
 
 **Exit criteria:** the table is complete; exclusions have a stated
 authority; any targeted (non-full) scope states what was left out and why.
@@ -376,8 +416,11 @@ For **each** commitment record in `compliance/adr-compliance-matrix.md`, produce
 | Commitment | [one-line description from the matrix] |
 | Severity if absent | [Critical / High / Medium / Low — per report template scale] |
 | Standards | [e.g. GDPR Art. 32, ISO 27001 Annex A 8.24] |
+| Scope checked | [which layers/paths were examined; quote the reachability declaration if the provider is external] |
+| Search receipt | [command + file universe + counts, or `receipts.json` reference] |
+| Confidence | [High / Medium / Low — how strongly the evidence supports this verdict] |
 
-**Implementation status:** IMPLEMENTED / PARTIAL / NOT FOUND / UNCLEAR
+**Implementation status:** IMPLEMENTED / PARTIAL / NOT FOUND (in scope: `<X>`) / UNCLEAR (out of scope: `<reason>`)
 
 **Evidence:**
 | # | What was checked | Where | Result |
@@ -483,11 +526,16 @@ Assemble the report **exclusively** from `templates/compliance-scan-report-templ
 1. Fill Document Control from Section 3 (no empty fields except
    signatures, which are wet/digital-sign applied outside the file).
 2. Write the Executive Summary last (3–5 sentences + metrics table).
-3. Promote every Phase 3 PARTIAL / NOT FOUND and every Phase 4 hit
-   to a numbered finding (F-001…) with severity, impact,
-   recommendation, owner, and target date.
+3. Promote every Phase 3 PARTIAL / NOT FOUND (in scope) and every Phase 4
+   confirmed hit to a numbered finding (F-001…) with severity, Confidence
+   (High/Medium/Low), Verification (read/leads-only), impact,
+   recommendation, owner, and target date. High/Critical findings must
+   quote code that was read and state a concrete impact scenario;
+   leads-only findings are capped at Medium with "requires verification".
 4. Include the full commitment-verification matrix (one row per
-   in-scope commitment ID).
+   in-scope commitment ID) with Status, Scope checked, Evidence / Search
+   receipt, Confidence, and Gap columns. Score the engagement as three
+   numbers — Implemented / Unclear / Not-found — never a single ratio.
 5. Append Appendices A–D from phase outputs (inventory, commands +
    full output, files reviewed, methodology reference).
 6. Run the pre-release self-check (mechanically assisted by
@@ -509,11 +557,13 @@ If the two disagree, the `templates/` file governs and this section
 must be updated to match.
 
 Required sections: Document Control → Executive Summary (with metrics:
-files scanned, commitments verified N/N, findings by severity,
-compliance score) → Scope & Methodology (scope table, tools table,
-limitations) → Findings (rating scale, summary table, detailed
+files scanned, commitments Implemented / Unclear / Not-found as three
+numbers, findings by severity) → Scope & Methodology (scope table,
+reachability declaration, tools table, limitations) → Findings (rating
+scale, summary table with Confidence + Verification, detailed
 F-001… records with Description / Evidence / Impact / Recommendation /
-Owner / Target date) → Commitment-verification matrix → Conclusion →
+Confidence / Verification / Owner / Target date) → Commitment-verification
+matrix → Conclusion →
 Appendices (A: inventory, B: commands+results, C: files reviewed,
 D: methodology reference) → Sign-off table.
 
@@ -557,6 +607,15 @@ Severity scale (binding):
     `<EXCLUDED_PATHS>`; never paste live secret values into reports,
     chat, or tickets beyond the minimum redacted excerpt that proves
     the finding. Escalate suspected live credentials immediately.
+13. **High/Critical means confirmed, not counted.** A High or Critical
+    rating requires read code plus a concrete impact scenario. Counts,
+    keyword hits, and unexamined matches cap at Medium with
+    "requires verification" — regardless of how large the count is.
+14. **The kit matrix is Target-state; your verdicts are Current-state.**
+    `compliance/adr-compliance-matrix.md` describes the aspirational
+    reference architecture. Never copy its commitments into a report as
+    if they were observed — every row earns its verdict from evidence
+    collected in this engagement.
 
 ---
 

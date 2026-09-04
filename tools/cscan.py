@@ -30,7 +30,7 @@ import re
 import subprocess
 import sys
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 TEMPLATE_REL = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "..",
@@ -420,7 +420,89 @@ DOC_CONTROL_FIELDS = [
     "Repository", "Branch", "Scope", "Standards",
 ]
 
-FINDING_REQUIRED_ROWS = ["Evidence location", "Commit", "Date discovered"]
+FINDING_REQUIRED_ROWS = ["Evidence location", "Commit", "Date discovered",
+                         "Confidence", "Verification"]
+
+CONFIDENCE_VALUES = ("HIGH", "MEDIUM", "LOW")
+
+MATRIX_STATUSES = ("IMPLEMENTED", "PARTIAL", "NOT FOUND", "UNCLEAR")
+
+# Heuristic tripwire (not a verdict): commitments commonly provided by a
+# framework or runtime platform. A NOT FOUND here warns the author to
+# re-check the reachability declaration instead of failing the gate.
+FRAMEWORK_TYPICAL_KEYWORDS = (
+    "mfa", "2fa", "totp", "webauthn", "sso", "oauth",
+    "encrypt", "tls", "rate-limit", "rate limit", "ratelimit", "throttl",
+    "session", "tenant", "permission", "audit", "backup",
+    "disaster recovery", "kms",
+)
+
+# Markers showing a Scope-checked cell really says "provider is outside".
+OUT_OF_SCOPE_MARKERS = (
+    "out of scope", "outside", "not in tree", "external",
+    "framework", "infra", "platform-owned", "platform owned",
+)
+
+
+def _table_cells(line):
+    stripped = line.strip()
+    if not stripped.startswith("|"):
+        return None
+    cells = [c.strip() for c in stripped.strip().strip("|").split("|")]
+    if cells and all(re.match(r"^:?-{2,}:?$", c) for c in cells):
+        return None  # separator row
+    return cells
+
+
+def _find_matrix_table(lines):
+    """Locate the compliance-matrix table. Returns (header_idx, colmap, rows)
+    where rows are (line_number, cells). colmap maps role -> column index."""
+    for i, line in enumerate(lines):
+        cells = _table_cells(line)
+        if not cells:
+            continue
+        norm = [c.lower() for c in cells]
+        if "status" in norm and ("commitment" in norm or "id" in norm):
+            def _col(*keys):
+                for j, cell in enumerate(norm):
+                    if any(k in cell for k in keys):
+                        return j
+                return None
+            colmap = {"status": norm.index("status")}
+            for role, keys in (("scope", ("scope",)),
+                               ("evidence", ("evidence", "receipt")),
+                               ("confidence", ("confidence",))):
+                found = _col(*keys)
+                if found is not None:
+                    colmap[role] = found
+            commitment_col = _col("commitment")
+            if commitment_col is None:
+                commitment_col = _col("id")
+            if commitment_col is not None:
+                colmap["commitment"] = commitment_col
+            rows = []
+            for k in range(i + 1, len(lines)):
+                rcells = _table_cells(lines[k])
+                if rcells is None:
+                    if lines[k].strip().startswith("|"):
+                        continue  # separator row
+                    break
+                rows.append((k + 1, rcells))
+            return i + 1, colmap, rows
+    return None, {}, []
+
+
+def _clean_status(cell):
+    text = re.sub(r"[^\w\s\(\)/:.\-]", "", cell or "").strip().upper()
+    for status in MATRIX_STATUSES:
+        if text.startswith(status):
+            return status
+    return None
+
+
+def _cell_filled(cells, idx):
+    return (idx is not None and idx < len(cells)
+            and cells[idx].strip() and not cells[idx].strip().startswith("<"))
 
 
 def cmd_validate(args):
@@ -447,7 +529,9 @@ def cmd_validate(args):
         if not re.search(r"\|\s*%s\s*\|" % re.escape(field), joined):
             failures.append("document control: missing field '%s'" % field)
 
-    # 3. Every FINDING block carries evidence + commit + date.
+    # 3. Every FINDING block carries evidence + commit + date + confidence
+    #    + verification. High/Critical additionally require read code and
+    #    a concrete impact scenario (leads-only caps at Medium).
     finding_starts = [i for i, l in enumerate(lines)
                       if re.match(r"####\s+FINDING\s+", l)]
     if not finding_starts:
@@ -456,13 +540,94 @@ def cmd_validate(args):
     for idx, start in enumerate(finding_starts):
         end = finding_starts[idx + 1] if idx + 1 < len(finding_starts) else len(lines)
         block = "\n".join(lines[start:end])
+        block_lines = lines[start:end]
         title = lines[start].strip()
-        for row in FINDING_REQUIRED_ROWS:
-            m = re.search(r"\|\s*%s\s*\|\s*(.*?)\s*\|" % re.escape(row), block)
-            if not m or not m.group(1).strip() or m.group(1).strip().startswith("<"):
-                failures.append("%s: row '%s' missing or unfilled" % (title, row))
 
-    # 4. Prior-engagement leak-guard.
+        def row_value(name):
+            m = re.search(r"\|\s*%s\s*\|\s*(.*?)\s*\|" % re.escape(name), block)
+            return m.group(1).strip() if m else ""
+
+        for row in FINDING_REQUIRED_ROWS:
+            val = row_value(row)
+            if not val or val.startswith("<"):
+                failures.append("%s: row '%s' missing or unfilled" % (title, row))
+        confidence = row_value("Confidence").upper()
+        if confidence and not confidence.startswith(CONFIDENCE_VALUES):
+            failures.append("%s: Confidence must be High/Medium/Low, got '%s'"
+                            % (title, row_value("Confidence")))
+        verification = row_value("Verification").replace(" ", "").upper()
+        if verification and not (verification.startswith("READ")
+                                 or verification.startswith("LEADS")):
+            failures.append("%s: Verification must be read/leads-only, got '%s'"
+                            % (title, row_value("Verification")))
+        rating = row_value("Rating").upper()
+        if rating.startswith(("CRITICAL", "HIGH")):
+            if not verification.startswith("READ"):
+                failures.append(
+                    "%s: rated %s without Verification: read — quote code that was "
+                    "read and state a concrete impact scenario (leads-only caps at Medium)"
+                    % (title, row_value("Rating")))
+            # Impact section must carry a concrete scenario, not a placeholder.
+            impact_ok = False
+            in_impact = False
+            for bl in block_lines:
+                s = bl.strip()
+                if re.match(r"\*\*Impact:\*\*", s):
+                    in_impact = True
+                    continue
+                if in_impact:
+                    if (re.match(r"(\*\*|####|##|---|\|)", s)):
+                        break
+                    if s and not s.startswith("<") and not s.startswith("<!--"):
+                        impact_ok = True
+                        break
+            if not impact_ok:
+                failures.append("%s: rated %s but no concrete Impact scenario found"
+                                % (title, row_value("Rating")))
+
+    # 4. Compliance-matrix rows: known status, filled Scope checked /
+    #    Evidence / Confidence; NOT FOUND must really be in scope.
+    _, colmap, matrix_rows = _find_matrix_table(lines)
+    score = {"IMPLEMENTED": 0, "PARTIAL": 0, "NOT FOUND": 0, "UNCLEAR": 0}
+    if not matrix_rows:
+        warnings.append("no compliance-matrix table found — per-commitment verdicts "
+                        "cannot be checked")
+    else:
+        for role in ("scope", "evidence", "confidence"):
+            if role not in colmap:
+                failures.append("matrix: required column '%s' missing "
+                                "(need Status + Scope checked + Evidence + Confidence)"
+                                % role)
+        for lineno, cells in matrix_rows:
+            status = _clean_status(cells[colmap["status"]]) if colmap.get("status") is not None and colmap["status"] < len(cells) else None
+            label = "matrix row %d" % lineno
+            if not status:
+                failures.append("%s: unknown Status '%s' (use IMPLEMENTED / PARTIAL / "
+                                "NOT FOUND (in scope: …) / UNCLEAR (out of scope: …))"
+                                % (label, cells[colmap["status"]] if colmap.get("status") is not None and colmap["status"] < len(cells) else "?"))
+                continue
+            score[status] += 1
+            for role in ("scope", "evidence", "confidence"):
+                if role in colmap and not _cell_filled(cells, colmap[role]):
+                    failures.append("%s (%s): column '%s' missing or unfilled"
+                                    % (label, status, role))
+            scope_text = (cells[colmap["scope"]].lower()
+                          if "scope" in colmap and colmap["scope"] < len(cells) else "")
+            if status == "NOT FOUND" and any(m in scope_text for m in OUT_OF_SCOPE_MARKERS):
+                failures.append(
+                    "%s: Scope checked declares the provider out of scope but verdict "
+                    "is NOT FOUND — use UNCLEAR (out of scope: <reason>)" % label)
+            if status == "NOT FOUND" and "commitment" in colmap:
+                commitment = (cells[colmap["commitment"]].lower()
+                              if colmap["commitment"] < len(cells) else "")
+                hit = next((k for k in FRAMEWORK_TYPICAL_KEYWORDS if k in commitment), None)
+                if hit:
+                    warnings.append(
+                        "%s: NOT FOUND on '%s' — commonly framework/infra-provided; "
+                        "confirm the providing layer is in scope or re-verdict as UNCLEAR"
+                        % (label, cells[colmap["commitment"]].strip()[:60]))
+
+    # 5. Prior-engagement leak-guard.
     forbidden = list(DEFAULT_FORBIDDEN_TOKENS)
     if args.forbidden_file:
         with open(args.forbidden_file, "r", encoding="utf-8") as fh:
@@ -474,8 +639,12 @@ def cmd_validate(args):
                 failures.append("line %d: forbidden token '%s' (prior-engagement leakage?)"
                                 % (i, token))
 
-    print("validate: %d finding(s), %d failure(s), %d warning(s)"
-          % (len(finding_starts), len(failures), len(warnings)))
+    print("validate: %d finding(s), %d matrix row(s), %d failure(s), %d warning(s)"
+          % (len(finding_starts), sum(score.values()), len(failures), len(warnings)))
+    if matrix_rows:
+        print("score: %d implemented / %d partial / %d not-found / %d unclear"
+              % (score["IMPLEMENTED"], score["PARTIAL"],
+                 score["NOT FOUND"], score["UNCLEAR"]))
     for w in warnings:
         print("  WARNING: " + w)
     for f in failures:

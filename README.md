@@ -6,9 +6,9 @@ Point it at a codebase. Get back an auditor-grade report where every finding tra
 
 `freeze` · `inventory` · `search` · `scaffold` · `validate`
 
-[![version](https://img.shields.io/badge/version-1.2.0-blue?style=flat-square)](CHANGELOG.md) [![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE) [![python](https://img.shields.io/badge/python-3.8%2B-yellow?style=flat-square)](tools/cscan.py) [![standards](https://img.shields.io/badge/standards-ISO%2027001%20%7C%20GDPR%20%7C%20UU%20PDP-lightgrey?style=flat-square)](compliance/adr-compliance-matrix.md)
+[![version](https://img.shields.io/badge/version-1.3.0-blue?style=flat-square)](CHANGELOG.md) [![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE) [![python](https://img.shields.io/badge/python-3.8%2B-yellow?style=flat-square)](tools/cscan.py) [![standards](https://img.shields.io/badge/standards-ISO%2027001%20%7C%20GDPR%20%7C%20UU%20PDP-lightgrey?style=flat-square)](compliance/adr-compliance-matrix.md)
 
-**Latest: `1.2.0`** — CSCAN Tools branding, executable evidence instrument, existence protocol, report validation gate. [What changed](CHANGELOG.md#120---2026-09-04) · [Tutorial](#tutorial-your-first-scan) · [Upgrading](#already-using-an-older-version)
+**Latest: `1.3.0`** — false-positive discipline: reachability declaration, scoped NOT FOUND, read-to-rate findings, three-number scoring, stricter `validate`. [What changed](CHANGELOG.md#130---2026-09-04) · [Tutorial](#tutorial-your-first-scan) · [Upgrading](#already-using-an-older-version)
 
 [**Quick start**](#quick-start) · [**Existence protocol**](#the-existence-protocol) · [Commands](#commands) · [Tutorial](#tutorial-your-first-scan) · [Structure](#repository-structure) · [Standards](#standards--coverage) · [Contributing](#contributing)
 
@@ -95,7 +95,7 @@ Out comes `.evidence/`: the frozen HEAD, file inventory, per-group hits, and `re
 **Works everywhere** — Claude Code, opencode, Codex, Cursor, Windsurf, or anything else with file access. Open the project you want scanned and paste this into the chat box:
 
 ```text
-You are a compliance scan agent operating under CSCAN Tools v1.2.0.
+You are a compliance scan agent operating under CSCAN Tools v1.3.0.
 
 1. Read compliance-scan-tools/compliance/scan-methodology.md and follow it exactly.
 2. Read compliance-scan-tools/compliance/adr-compliance-matrix.md — verify each
@@ -108,8 +108,10 @@ Scope: <top-level dirs from `git ls-files`> | Exclusions: <paths + authority>
 Standards: ISO 27001:2022, GDPR, UU PDP No. 27/2022
 Operator: AI Agent | Reviewer: <human> | Approver: <human> | Classification: Confidential
 
-Rules: EXISTS → file:line + commit + date. NOT FOUND → search receipt.
-Not searched → UNCLEAR, stated. Leads are not evidence. Never open exclusions.
+Rules: EXISTS → file:line + commit + date. NOT FOUND (in scope only) → search receipt.
+Framework/infra-backed controls outside the tree → UNCLEAR, never NOT FOUND.
+Not searched → UNCLEAR, stated. Leads are not evidence: High/Critical require
+read code + impact scenario; leads-only caps at Medium. Never open exclusions.
 Gate release with `cscan validate` — no placeholders, no leakage, human sign-off.
 ```
 
@@ -122,7 +124,8 @@ Prefer to drive it yourself? The full 14-variable invocation block, attachment l
 Releases are documented in [CHANGELOG.md](CHANGELOG.md) with rename maps where paths moved:
 
 - **On 1.0.x → 1.1.0**: three files were renamed (`scan-methodology.md`, `adr-compliance-matrix.md`, `compliance-scan-agent.md`). Update any saved prompts or bookmarks; report content is unchanged.
-- **On 1.1.x → 1.2.0**: branding only (`CSCAN Tools`), plus a richer README and `CONTRIBUTING.md`. No path or behavior changes — `cscan validate` keeps passing on 1.1-era reports.
+- **On 1.1.x → 1.2.0**: branding only (`CSCAN Tools`), plus a richer README and `CONTRIBUTING.md`. No path changes.
+- **On 1.2.x → 1.3.0**: behavior change — `validate` is stricter (Scope checked, Confidence/Verification, scoped NOT FOUND, read-to-rate High/Critical). 1.2-era reports need the new finding/matrix columns before they pass. Methodology, matrix, and template all cover the new rules.
 
 ---
 
@@ -133,14 +136,15 @@ The one idea that makes everything else work. Every statement about the target i
 | Verdict | Meaning | Minimum proof |
 |---|---|---|
 | ✅ EXISTS | Present at the frozen commit | Quoted file content with `path:line-range` + commit + date |
-| ❌ NOT FOUND | Absent from the searched scope | **Search receipt** — exact patterns, directories + file counts, command + tool version, timestamp, exclusions, 0-match result |
-| ❔ UNCLEAR | No verdict possible yet | Explicit "not searched because …" — a valid outcome, never a guess |
+| ❌ NOT FOUND | Absent from a layer this scan can observe | **Search receipt** + "NOT FOUND (in scope: `<X>`)" — never for framework/infra-owned controls |
+| ❔ UNCLEAR | Provider outside scope, or never searched | Explicit reason quoting the reachability declaration — a valid outcome, never a guess |
 
 Three rules do most of the work:
 
 1. **Leads are not evidence.** A comment saying "encrypts data", a README promising MFA, a function named `deleteUser` — follow each to the enforcement point (the code path that executes) and quote *that*.
 2. **One sighting does not prove coverage.** Auth on one route never proves "all routes" — that claim needs every route listed with a verdict, or it stays PARTIAL/UNCLEAR.
 3. **Excluded paths are UNCLEAR, never NOT FOUND.** Anything unopened supports no claim in either direction.
+4. **High/Critical means confirmed, not counted.** Read code + concrete impact scenario, or the finding caps at Medium with "requires verification" — a thousand unexamined hits are one lead, not one catastrophe.
 
 Full version in [`compliance/scan-methodology.md`](compliance/scan-methodology.md#the-existence-protocol-do-not-assume---collect-evidence) §4 — including why `cscan search` receipts exist and what a valid NOT FOUND looks like.
 
@@ -253,7 +257,7 @@ tools/
 ├── cscan                        🐧  POSIX shim
 └── cscan.ps1                    🪟  PowerShell shim (5.1 compatible)
 tests/
-└── test_cscan.py                ✅  9 tests: fixture-repo evidence runs + kit hygiene guards
+└── test_cscan.py                ✅  14 tests: fixture-repo evidence runs, validate gates + kit hygiene guards
 .github/workflows/ci.yml         🔁  cross-OS test matrix + prior-engagement leak-guard
 ```
 
@@ -308,15 +312,15 @@ The matrix's 31 commitments span tenant isolation, deny-by-default authorization
 | Section | Contents |
 |---|---|
 | Document Control | ID, version, classification, author/reviewer/approver, dates, commit hashes, repo, branch, scope, standards, evidence bundle |
-| Executive Summary | 3–5 sentence posture + metrics (files scanned, commitments N/N, findings by severity, compliance score) |
+| Executive Summary | 3–5 sentence posture + metrics (files scanned, Implemented / Unclear / Not-found as three numbers, findings by severity) |
 | Scope & Methodology | In/out-of-scope tables, 7-phase description, tools table, **Limitations** |
-| Findings | Rating scale, F-001… summary table, detailed records (Description / verbatim Evidence / Impact / Recommendation / Owner / Target date) |
-| Compliance Matrix | One row per commitment: ✅ Implemented / ⚠️ Partial / ❌ Not found / ❔ Unclear + evidence + gap |
+| Findings | Rating scale, F-001… summary table (Confidence + Verification), detailed records (Description / verbatim Evidence / Impact / Recommendation / Confidence / Verification / Owner / Target date) |
+| Compliance Matrix | One row per commitment: ✅ Implemented / ⚠️ Partial (in scope) / ❌ NOT FOUND (in scope) / ❔ Unclear + Scope checked + Evidence + Confidence + Gap |
 | Conclusion | Verdict within scope, biggest risks, what-first ordering |
 | Appendices | A: inventory · B: commands + receipts · C: files reviewed · D: methodology ref |
 | Sign-off | Scanner / Reviewer / Approver signatures + dates |
 
-Severity scale: **Critical** (24h) · **High** (7d) · **Medium** (30d) · **Low** (next release) · **Informational** (track).
+Severity scale: **Critical** (24h) · **High** (7d) · **Medium** (30d, incl. unverified leads) · **Low** (next release) · **Informational** (track). High/Critical require read code + impact scenario.
 
 ---
 
@@ -375,7 +379,7 @@ In rough priority order — each is a small, reviewable release, and contributio
 
 ## Versioning
 
-Semantic versioning ([CHANGELOG.md](CHANGELOG.md)). Current release: **v1.2.0** — CSCAN Tools branding, rich README, `CONTRIBUTING.md`, executable instrument, existence protocol, validation gate.
+Semantic versioning ([CHANGELOG.md](CHANGELOG.md)). Current release: **v1.3.0** — false-positive discipline (reachability declaration, scoped NOT FOUND, read-to-rate findings, three-number scoring, stricter `validate`).
 
 ## License
 

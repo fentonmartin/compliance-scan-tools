@@ -7,6 +7,38 @@
 > for one domain — replace them with your system's equivalents during a scan.
 > Verification procedure: `scan-methodology.md` (Phase 3).
 
+> **Target-state reference, not a verdict.** Every row below describes the
+> *aspirational* architecture — what a compliant platform looks like. A scan
+> report records *Current-state* verdicts earned from evidence in one
+> engagement. Never copy a row into a report as if it were observed; never
+> let an auditor read this matrix as a claim about any real system.
+
+## Verdict enum (binding for reports)
+
+| Status | Meaning | When to use |
+|---|---|---|
+| `IMPLEMENTED` | Observed in scope | Quoted enforcement-point evidence at `path:line` + commit + date |
+| `PARTIAL` | Partly implemented **inside** the scanned scope | Some surfaces covered, some missing — all surfaces inside scope; name the gap |
+| `NOT FOUND (in scope: <X>)` | Expected inside the declared scope and absent | Exhaustive search receipt over `<X>`; the providing layer is in the tree |
+| `UNCLEAR (out of scope: <reason>)` | Cannot be judged from this scan | Providing framework/dependency is outside the tree, infrastructure is platform-owned, or the search was never run — quote the reachability declaration |
+
+`PARTIAL` must never mean "the framework probably provides it but it isn't
+visible" — that is `UNCLEAR`. A grep-negative for a control that could live
+outside the tree is never `NOT FOUND`.
+
+## Provider map (triage aid — reachability declaration governs)
+
+Which layer typically *provides* each commitment. Use this to predict which
+rows risk going `UNCLEAR` on an application-only scope — then confirm against
+the engagement's reachability declaration, not against this table.
+
+| Typical provider | ADR IDs |
+|---|---|
+| Application code (verifiable in the app tree) | ADR-002, ADR-003, ADR-004, ADR-006, ADR-007, ADR-008, ADR-010, ADR-012, ADR-013, ADR-014, ADR-021, ADR-022, ADR-023, ADR-024, ADR-025, ADR-026, ADR-028, ADR-029, ADR-031 |
+| Framework / platform library (often outside the tree) | ADR-015, ADR-017 |
+| Infrastructure / runtime platform (deploy, network, storage, KMS) | ADR-005, ADR-011, ADR-019, ADR-020, ADR-030 |
+| Hybrid (app design + framework/infra — split the verdict per surface) | ADR-001, ADR-009, ADR-016, ADR-018, ADR-027 |
+
 This document defines core Architectural Decision Records (ADRs) for a backend platform, mapping technical architecture decisions to compliance requirements across **ISO/IEC 27001:2022**, the **EU General Data Protection Regulation (GDPR)**, and the **Indonesian Personal Data Protection Law (UU PDP No. 27/2022)**.
 
 ---

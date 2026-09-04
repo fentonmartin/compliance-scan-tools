@@ -35,13 +35,12 @@
 | Metric | Value |
 |---|---|
 | Total files scanned | N (tracked N + untracked N, at <SCAN_END_COMMIT>) |
-| Commitments verified | N / N (IMPLEMENTED N, PARTIAL N, NOT FOUND N, UNCLEAR N) |
+| Commitments | IMPLEMENTED N · PARTIAL N · NOT FOUND (in scope) N · UNCLEAR N |
 | Critical findings | N |
 | High findings | N |
 | Medium findings | N |
 | Low findings | N |
 | Informational observations | N |
-| Compliance score | N / N commitments fully implemented |
 
 ---
 
@@ -57,6 +56,17 @@ Depth: Full / Targeted (delete as applicable; if Targeted, state what was
 left out and why).
 
 Authorization: requested by <NAME>, on <DATE>, under <AUTHORITY>.
+
+### Layers & reachability declaration
+
+<!-- Which layers this scan could observe. A control whose provider is
+outside the declared scope is UNCLEAR, never NOT FOUND. -->
+
+| Layer | In scope? | Detail |
+|---|---|---|
+| Application code | Yes — <SCOPE_DIRS> | <paths examined> |
+| Framework & dependencies | <in tree / external + manifests observed> | <framework + version source, e.g. manifest paths> |
+| Infrastructure & runtime | <in scope / out of scope> | <where deploy/TLS/backup config lives + owner> |
 
 ### 2.2 Methodology
 
@@ -93,29 +103,36 @@ write "None beyond <EXCLUDED_PATHS>" only if true. -->
 
 | Rating | Definition | Action required |
 |---|---|---|
-| Critical | Direct compliance violation, data exposure, or security breach risk | Immediate remediation (within 24 hours) |
-| High | Significant gap in compliance controls | Remediation within 7 days |
-| Medium | Partial implementation or documentation gap | Remediation within 30 days |
+| Critical | Confirmed compliance violation, data exposure, or breach risk (code read, impact scenario stated) | Immediate remediation (within 24 hours) |
+| High | Confirmed significant gap in compliance controls (code read, impact scenario stated) | Remediation within 7 days |
+| Medium | Partial implementation, documentation gap, or **unverified lead** ("requires verification") | Remediation within 30 days / verify first |
 | Low | Minor improvement opportunity | Next scheduled release |
 | Informational | Observation, no immediate action required | Track and monitor |
 
+<!-- High/Critical require Verification: read + quoted code + concrete impact
+scenario. Leads-only findings (counts, unexamined matches) cap at Medium. -->
+
 ### 3.2 Findings Summary
 
-| ID | Rating | Title | Commitment / Standard | Status |
-|---|---|---|---|---|
-| F-001 | <RATING> | <TITLE> | <ID / STANDARD REF> | Open |
-| F-002 | <RATING> | <TITLE> | <ID / STANDARD REF> | Open |
+| ID | Rating | Title | Commitment / Standard | Confidence | Verification | Status |
+|---|---|---|---|---|---|---|
+| F-001 | <RATING> | <TITLE> | <ID / STANDARD REF> | <High/Medium/Low> | <read/leads-only> | Open |
+| F-002 | <RATING> | <TITLE> | <ID / STANDARD REF> | <High/Medium/Low> | <read/leads-only> | Open |
 
 ### 3.3 Detailed Findings
 
-<!-- Copy this block per finding. Evidence is verbatim; impact and
-recommendation are specific and actionable. -->
+<!-- Copy this block per finding. Promotion rule: a lead becomes a finding
+only after reading ≥1 location and quoting behavior that proves impact.
+Evidence is verbatim; impact states WHO is affected VIA which path WITH
+what consequence. -->
 
 #### FINDING F-001: <TITLE>
 
 | Field | Value |
 |---|---|
 | Rating | Critical / High / Medium / Low / Informational |
+| Confidence | High / Medium / Low — how strongly the evidence supports this finding |
+| Verification | read / leads-only (High & Critical require `read`) |
 | Commitment reference | <ID or "-" for general security findings> (see compliance/adr-compliance-matrix.md) |
 | Standard reference | <STANDARD REF, e.g. GDPR Art. 32 / ISO 27001 Annex A 8.24> |
 | Evidence location | <PATH>:<LINE-RANGE> or search scope + command |
@@ -149,11 +166,13 @@ values to the minimum excerpt proving the finding.>
 ## 4. Compliance Matrix (Commitment Verification)
 
 <!-- One row per in-scope commitment in compliance/adr-compliance-matrix.md.
-Status: ✅ Implemented | ⚠️ Partial | ❌ Not found | ❔ Unclear -->
+Status: ✅ IMPLEMENTED | ⚠️ PARTIAL (in scope) | ❌ NOT FOUND (in scope: <X>) | ❔ UNCLEAR (out of scope: <reason>).
+PARTIAL is for partial implementation INSIDE scope — never for
+"framework probably provides it". Score as three numbers, not one ratio. -->
 
-| ID | Commitment | Status | Evidence | Gap |
-|---|---|---|---|---|
-| <ID> | <ONE-LINE COMMITMENT> | ✅/⚠️/❌/❔ | <PATH>:<LINES> or search ref + commit | <GAP OR "NONE OBSERVED WITHIN SCOPE"> |
+| ID | Commitment | Status | Scope checked | Evidence / Search receipt | Confidence | Gap |
+|---|---|---|---|---|---|---|
+| <ID> | <ONE-LINE COMMITMENT> | ✅/⚠️/❌/❔ + qualifier | <layers + paths checked> | <PATH>:<LINES> or search ref + commit | <High/Medium/Low> | <GAP OR "NONE OBSERVED WITHIN SCOPE"> |
 
 ---
 

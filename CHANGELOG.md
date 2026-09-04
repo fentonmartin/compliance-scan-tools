@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-09-04
+
+Implements change request `CSCAN-CR-2026-09-04-01` (received, applied,
+source file removed): systematic false positives when scanning
+application-only repos — out-of-scope controls graded NOT FOUND, and
+grep-count leads rated High without code being read.
+
+### Added
+- Reachability declaration (methodology Phase 0, report §2.1): layers in
+  scope, framework/dependencies in-tree or external, infra/runtime owner.
+- Binding verdict rules: NOT FOUND only in declared scope, always qualified
+  `NOT FOUND (in scope: <X>)`; framework/dependency/infra-backed controls
+  with the provider outside the tree are UNCLEAR, never NOT FOUND or
+  "PARTIAL (gap)".
+- Lead→Finding promotion rule (read ≥1 location + quoted impact behavior);
+  High/Critical require read code + concrete impact scenario; leads-only
+  findings cap at Medium ("requires verification").
+- Per-finding `Confidence` + `Verification` columns; per-matrix `Scope
+  checked` + `Search receipt` + `Confidence` columns; three-number scoring
+  (Implemented / Unclear / Not-found) replacing the single ratio.
+- Matrix: Target-state declaration, binding verdict enum, and a provider
+  map (app / framework / infra / hybrid) as a triage aid.
+- `cscan validate` gates: fails on NOT FOUND without scope+receipt,
+  High/Critical without `Verification: read` + impact scenario,
+  scope-declares-external yet verdict-NOT FOUND contradictions, unknown
+  statuses, and missing matrix columns; warns on NOT FOUND for
+  framework-typical commitments; prints the three-number score.
+
+### Changed
+- `validate` is stricter: 1.2-era reports need the new finding/matrix
+  columns before they pass (see README upgrading notes).
+
 ## [1.2.0] - 2026-09-04
 
 ### Changed
@@ -69,6 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Every scan command now takes scope as a variable; methodology fails closed
   on copied scope (Rule 11).
 
+[1.3.0]: https://github.com/fentonmartin/compliance-scan-tools/releases/tag/v1.3.0
 [1.2.0]: https://github.com/fentonmartin/compliance-scan-tools/releases/tag/v1.2.0
 [1.1.0]: https://github.com/fentonmartin/compliance-scan-tools/releases/tag/v1.1.0
 [1.0.0]: https://github.com/fentonmartin/compliance-scan-tools/releases/tag/v1.0.0

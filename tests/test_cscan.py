@@ -147,13 +147,87 @@ class CscanTest(unittest.TestCase):
               "| Branch | main |\n| Scope | ./app |\n| Standards | ISO 27001:2022 |\n\n"
               "## 3. Findings\n\n#### FINDING F-001: Hardcoded token\n\n"
               "| Field | Value |\n|---|---|\n"
-              "| Rating | High |\n| Commitment reference | - |\n"
+              "| Rating | High |\n| Confidence | High |\n| Verification | read |\n"
+              "| Commitment reference | - |\n"
               "| Standard reference | ISO 27001 Annex A 8.4 |\n"
               "| Evidence location | app/auth.py:1 |\n| Commit | bbb |\n"
-              "| Date discovered | 2026-09-04 |\n")
+              "| Date discovered | 2026-09-04 |\n\n"
+              "**Impact:**\nExposed token allows account takeover via the login path.\n\n"
+              "## 4. Compliance Matrix\n\n"
+              "| ID | Commitment | Status | Scope checked | Evidence / Search receipt | Confidence | Gap |\n"
+              "|---|---|---|---|---|---|---|\n"
+              "| ADR-006 | Secrets never in source | ✅ IMPLEMENTED | app/ + config/ | app/auth.py:1 @bbb | High | None observed within scope |\n"
+              "| ADR-017 | MFA and sessions | ❔ UNCLEAR (out of scope: framework) | app/ only; framework X out of tree | receipts.json auth group, 0 in-scope matches | Medium | Provider external |\n")
         code, out = run_cscan("validate", "--report", report)
         self.assertEqual(code, 0, out)
         self.assertIn("0 failure(s)", out)
+        self.assertIn("1 implemented / 0 partial / 0 not-found / 1 unclear", out)
+
+    def _matrix_report(self, rows):
+        header = ("# R\n\n## Document Control\n\n| Field | Value |\n|---|---|\n"
+                  "| Document ID | SCAN-000000-01 |\n| Version | 1.0 |\n"
+                  "| Classification | Internal |\n| Author | t |\n"
+                  "| Reviewed by | r |\n| Approved by | a |\n"
+                  "| Scan date | 2026-09-04 |\n| Commit (start) | aaa |\n"
+                  "| Commit (end) | bbb |\n| Repository | https://example.com/o/r.git |\n"
+                  "| Branch | main |\n| Scope | ./app |\n| Standards | ISO 27001:2022 |\n\n"
+                  "## 4. Compliance Matrix\n\n"
+                  "| ID | Commitment | Status | Scope checked | Evidence / Search receipt | Confidence | Gap |\n"
+                  "|---|---|---|---|---|---|---|\n")
+        return header + "\n".join(rows) + "\n"
+
+    def test_validate_rejects_notfound_without_scope(self):
+        report = os.path.join(self.evidence, "noscope.md")
+        write(report, self._matrix_report(
+            ["| ADR-013 | DSAR workflows | ❌ NOT FOUND |  | app/ searched, 0 matches | High | gap |"]))
+        code, out = run_cscan("validate", "--report", report)
+        self.assertEqual(code, 1)
+        self.assertIn("column 'scope' missing or unfilled", out)
+
+    def test_validate_rejects_high_without_read(self):
+        report = os.path.join(self.evidence, "noread.md")
+        write(report,
+              "# R\n\n## Document Control\n\n| Field | Value |\n|---|---|\n"
+              "| Document ID | S |\n| Version | 1.0 |\n| Classification | I |\n"
+              "| Author | t |\n| Reviewed by | r |\n| Approved by | a |\n"
+              "| Scan date | 2026-09-04 |\n| Commit (start) | a |\n| Commit (end) | b |\n"
+              "| Repository | x |\n| Branch | main |\n| Scope | ./app |\n| Standards | ISO |\n\n"
+              "## 3. Findings\n\n#### FINDING F-001: Many prints\n\n"
+              "| Field | Value |\n|---|---|\n"
+              "| Rating | High |\n| Confidence | Low |\n| Verification | leads-only |\n"
+              "| Commitment reference | - |\n| Standard reference | ISO 27001 Annex A 8.11 |\n"
+              "| Evidence location | grep count 409 |\n| Commit | b |\n"
+              "| Date discovered | 2026-09-04 |\n\n**Impact:**\nUnverified.\n")
+        code, out = run_cscan("validate", "--report", report)
+        self.assertEqual(code, 1)
+        self.assertIn("without Verification: read", out)
+
+    def test_validate_rejects_framework_contradiction(self):
+        report = os.path.join(self.evidence, "contradiction.md")
+        write(report, self._matrix_report(
+            ["| ADR-015 | Rate limiting | ❌ NOT FOUND | app/ only; limiter framework out of tree | grep 0 matches | High | gap |"]))
+        code, out = run_cscan("validate", "--report", report)
+        self.assertEqual(code, 1)
+        self.assertIn("use UNCLEAR", out)
+
+    def test_validate_warns_framework_typical_notfound(self):
+        report = os.path.join(self.evidence, "typical.md")
+        write(report, self._matrix_report(
+            ["| ADR-017 | MFA and secure session lifecycle | ❌ NOT FOUND | app/ + auth service | grep 0 matches | High | gap |"]))
+        code, out = run_cscan("validate", "--report", report)
+        self.assertEqual(code, 0, out)  # warning only — author may know better
+        self.assertIn("commonly framework/infra-provided", out)
+
+    def test_validate_reports_three_number_score(self):
+        report = os.path.join(self.evidence, "score.md")
+        write(report, self._matrix_report([
+            "| ADR-006 | Secrets never in source | ✅ IMPLEMENTED | app/ | app/auth.py:1 @b | High | none |",
+            "| ADR-015 | Rate limiting | ❌ NOT FOUND (in scope: app/) | app/ | grep 0 matches | High | gap |",
+            "| ADR-017 | MFA and sessions | ❔ UNCLEAR (out of scope: framework) | app/ only | receipts.json | Medium | external |",
+        ]))
+        code, out = run_cscan("validate", "--report", report)
+        self.assertEqual(code, 0, out)
+        self.assertIn("1 implemented / 0 partial / 1 not-found / 1 unclear", out)
 
     def test_validate_flags_forbidden_token(self):
         report = os.path.join(self.evidence, "leak.md")
