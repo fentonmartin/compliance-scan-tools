@@ -1,0 +1,9 @@
+#!/bin/sh
+# POSIX shim for the cscan evidence tool. Prefers python3, falls back to python.
+# Usage: ./tools/cscan <freeze|inventory|search|scaffold|validate> [options]
+_CSCAN_DIR="$(dirname "$0")"
+if command -v python3 >/dev/null 2>&1; then
+  exec python3 "$_CSCAN_DIR/cscan.py" "$@"
+else
+  exec python "$_CSCAN_DIR/cscan.py" "$@"
+fi

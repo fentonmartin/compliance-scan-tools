@@ -2,11 +2,11 @@
 type: topic
 title: Full Project Scan — Evidence-Based Audit Methodology
 status: active
-version: 1.0.0
+version: 1.1.0
 claim_type: reference
 subtype: reference
 updated: 2026-09-04
-sources: [compliance/README.md, compliance/references/]
+sources: [compliance/adr-compliance-matrix.md, compliance/references/]
 ---
 
 # Full Project Scan — Evidence-Based Audit Methodology
@@ -64,6 +64,7 @@ There are no defaults for target-specific fields.
 | `<REVIEWER>` | Human reviewer name (mandatory before release) | `<full name>` |
 | `<APPROVER>` | Human approver name (mandatory before release) | `<full name>` |
 | `<SCAN_DATE>` | Evidence freeze date, `YYYY-MM-DD` | `2026-09-04` |
+| `<EVIDENCE_DIR>` | Directory holding machine-generated evidence (`cscan` output + receipts), stored outside the target tree | `./.evidence/SCAN-260904-01/` |
 
 ### 1.2 Invoke the agent
 
@@ -72,8 +73,8 @@ this methodology file:
 
 ```text
 You are a compliance scan agent. Follow the methodology in
-compliance/FULL-PROJECT-SCAN-METHODOLOGY.md exactly.
-Verify the commitments in compliance/README.md against the code.
+compliance/scan-methodology.md exactly.
+Verify the commitments in compliance/adr-compliance-matrix.md against the code.
 
 Variables:
 - Target repo: <TARGET_REPO_URL> (branch <TARGET_BRANCH>)
@@ -84,6 +85,8 @@ Variables:
 Rules: evidence for every claim (file:line + commit hash),
 negative results are findings, quote don't paraphrase,
 never fabricate, stop and report limits honestly.
+Preferred instrument: tools/cscan.py (freeze/inventory/search/scaffold/validate)
+— attach its JSON outputs and receipts.json in Appendix B.
 Deliver the report using templates/compliance-scan-report-template.md.
 ```
 
@@ -93,7 +96,7 @@ The scan is done when **all** of these hold:
 
 - [ ] Phase 0 scope table is filled and authorized.
 - [ ] Phase 1 inventory counts reconcile with `git ls-files`.
-- [ ] Every in-scope commitment in `compliance/README.md` has a
+- [ ] Every in-scope commitment in `compliance/adr-compliance-matrix.md` has a
       Phase 3 verdict of IMPLEMENTED / PARTIAL / NOT FOUND / UNCLEAR
       with dated evidence.
 - [ ] Every Phase 4 check has either evidence or an explicit
@@ -123,7 +126,7 @@ This methodology is intentionally project-agnostic:
 - It never assumes a language, framework, or directory layout.
   Directory lists in examples are illustrative and marked as such.
 - Normative commitments (what "should" hold) live in
-  `compliance/README.md`. This file defines *how to verify them*.
+  `compliance/adr-compliance-matrix.md`. This file defines *how to verify them*.
 
 ---
 
@@ -202,6 +205,43 @@ IF you DID NOT SEARCH              → say so explicitly; do not guess either wa
    - all configuration files checked;
    - all entry points reviewed (if applicable).
 
+### The existence protocol (do not assume — collect evidence)
+
+Every verdict about the target is exactly one of three states. There is
+no fourth state ("probably", "likely", "assumed"). The scanner's job is
+to move claims out of UNCLEAR by collecting evidence, not by reasoning
+about what "must" be there.
+
+| Verdict | Meaning | Minimum proof required |
+|---|---|---|
+| IMPLEMENTED / EXISTS | The behavior or artifact is present in the target at `<SCAN_END_COMMIT>` | Direct observation: quoted file content with `<path>:<line-range>` + commit + date. One sighting is enough — but cite the strongest (enforcement point, not a comment mentioning it). |
+| NOT FOUND / ABSENT | The behavior or artifact is absent from the search scope | A **search receipt**: every pattern tried (exact strings), every directory traversed with file/extension counts, the exact command + working directory + tool version, timestamp, exclusions honored, and the 0-match result. Absence is proven by the receipt, never by silence. |
+| UNCLEAR / NOT SEARCHED | No verdict is possible yet | An explicit statement of what was not searched and why (tool missing, path excluded, binary asset, time-box hit). UNCLEAR is a valid, reportable outcome. Guessing in either direction is a failed scan. |
+
+Rules:
+
+1. **Comments, docs, and names are not implementations.** A code comment
+   saying "encrypts data", a README promising MFA, or a function named
+   `deleteUser` is a *lead*, not evidence. Follow the lead to the
+   enforcement point (the code path that actually executes) and quote that.
+2. **One positive sighting does not prove coverage.** Finding auth on one
+   route does not prove "all routes require auth" — that universal claim
+   needs an exhaustive route-table review (list every route + verdict) or
+   it stays PARTIAL/UNCLEAR.
+3. **One pattern is not an exhaustive search.** A NOT FOUND for "erasure"
+   after grepping a single keyword is UNCLEAR, not NOT FOUND. The pattern
+   library (Section 8) gives starting sets; extend them from Phase 2
+   observations (framework idioms, ORM names, queue/topic names) and record
+   every extension in the receipt.
+4. **Excluded paths are UNCLEAR, never NOT FOUND.** Anything under
+   `<EXCLUDED_PATHS>` was not opened, so no claim — positive or negative —
+   may rest on it. Name the exclusion and escalate per engagement rules.
+5. **Machine receipts beat memory.** `cscan search` writes per-group
+   receipts (`receipts.json`: command, cwd, timestamps, file universe,
+   files searched/skipped, match counts). Paste them into Appendix B.
+   A finding whose receipt is missing is UNCLEAR until the search is
+   re-run and recorded.
+
 ---
 
 ## 5. Scan protocol
@@ -234,6 +274,11 @@ authority; any targeted (non-full) scope states what was left out and why.
 ### Phase 1 — Inventory (what exists)
 
 **Goal:** a complete, verifiable map of every file in the target project.
+
+Preferred instrument: `cscan freeze` + `cscan inventory --target <path>
+--out <EVIDENCE_DIR>/01-inventory` (writes tracked/untracked lists,
+counts, and summary JSON). The commands below are the manual equivalent —
+Appendix B must record whichever actually ran.
 
 Discover scope from the repo itself. Illustrative commands (run against
 the *target* checkout; adapt flags to the local shell — see Section 9):
@@ -314,13 +359,13 @@ has a file:line or an explicit "not found" note.
 
 ### Phase 3 — Compliance verification (commitments vs implementation)
 
-**Goal:** for every normative commitment in `compliance/README.md`
+**Goal:** for every normative commitment in `compliance/adr-compliance-matrix.md`
 (ADR matrix), find the implementation in the target code — or prove its
 absence with a documented search.
 
 This is the most critical phase for compliance evidence.
 
-For **each** commitment record in `compliance/README.md`, produce:
+For **each** commitment record in `compliance/adr-compliance-matrix.md`, produce:
 
 ```markdown
 #### <ID>: [Commitment name]
@@ -384,6 +429,11 @@ Run each check against `<SCOPE_DIRS>`, respecting `<EXCLUDED_PATHS>`.
 Record the exact command, its working directory, and either
 file:line hits with surrounding context or an explicit "0 matches."
 
+Preferred instrument: `cscan search --target <path> --out
+<EVIDENCE_DIR>/02-search --exclude '<pattern>'` (repeat `--exclude` per
+excluded path; writes `<group>.txt` hits plus `receipts.json`). `cscan`
+never opens excluded paths — it records their names only.
+
 | # | Check | Method (adapt to shell; Section 9) | Evidence format |
 |---|---|---|---|
 | 4.1 | Secrets in code | Pattern search for `password\|secret\|api_key\|token\|credential` across code/config extensions present in the repo | file:line of every match + context; never reproduce live secret *values* beyond what is needed to prove the finding — prefer redacted excerpts + entropy/location metadata |
@@ -405,7 +455,7 @@ record it under report Section 2.4 (Limitations) — never silently drop it.
 |---|---|---|
 | Code without docs | For each implemented subsystem in `<SCOPE_DIRS>`, check the target's own docs tree for coverage | List of undocumented subsystems (paths) |
 | Docs without code | For each feature the target's docs promise, check `<SCOPE_DIRS>` for implementation | List of unimplemented documented features |
-| Commitments without implementation | Cross-reference `compliance/README.md` verdicts from Phase 3 | List of NOT FOUND / PARTIAL IDs |
+| Commitments without implementation | Cross-reference `compliance/adr-compliance-matrix.md` verdicts from Phase 3 | List of NOT FOUND / PARTIAL IDs |
 
 **Exit criteria:** the three lists exist (possibly "none observed").
 
@@ -440,7 +490,10 @@ Assemble the report **exclusively** from `templates/compliance-scan-report-templ
    in-scope commitment ID).
 5. Append Appendices A–D from phase outputs (inventory, commands +
    full output, files reviewed, methodology reference).
-6. Run the pre-release self-check:
+6. Run the pre-release self-check (mechanically assisted by
+   `cscan validate --report <report>`, which fails on unfilled
+   placeholders, incomplete FINDING blocks, missing Document Control
+   fields, and prior-engagement token leakage):
    - [ ] No prior-engagement names, URLs, directories, or model names remain.
    - [ ] Every finding has evidence location + commit + date + standard ref.
    - [ ] Limitations (Section 2.4) lists everything not checked and why.
@@ -516,6 +569,12 @@ note. Patterns below are starting points — extend them from Phase 2
 observations (framework idioms, ORM names, queue names) and record
 extensions.
 
+Matching is **case-insensitive** in every engine (`cscan` default;
+add `-i` to manual `grep`/`rg` invocations). Audit search favors
+recall — `API_TOKEN`, `Password`, and `secret` must all hit the same
+pattern. Case-sensitive refinement, if ever needed, must be justified
+in the receipt.
+
 ```bash
 # Secrets (restrict --include to extensions observed in Phase 1)
 grep -rn "password\|secret\|api_key\|apikey\|token\|credential" <SCOPE>
@@ -564,7 +623,10 @@ large trees; record which tool and version ran (report Section 2.3).
 
 ## 10. References
 
-- `compliance/README.md` — normative commitment matrix verified by this methodology.
+- `compliance/adr-compliance-matrix.md` — normative commitment matrix verified by this methodology.
 - `compliance/references/` — source texts (GDPR, ISO 27001 Annex A controls).
 - `templates/compliance-scan-report-template.md` — normative report skeleton.
-- `prompts/scan-agent-prompt.md` — short copy-paste invocation wrapper.
+- `prompts/compliance-scan-agent.md` — short copy-paste invocation wrapper.
+- `tools/cscan.py` — evidence instrument (freeze/inventory/search/scaffold/validate); `tools/cscan` + `tools/cscan.ps1` are thin shims.
+- `tests/test_cscan.py` — executable specification of the instrument (`python -m unittest discover -s tests`).
+- `AGENTS.md` — contributor conventions for humans and agents editing this kit.

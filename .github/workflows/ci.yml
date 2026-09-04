@@ -1,0 +1,34 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Run instrument tests
+        run: python -m unittest discover -s tests -v
+
+  leak-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prior-engagement token check (must print nothing)
+        # Scope is content-only: tools/cscan.py holds the intentional
+        # documented token list (pinned by test_forbidden_token_list_is_canonical),
+        # tests/ holds fixtures. Everything else must be clean.
+        run: |
+          grep -rniE "nds-by-nat|fayolearn|big-pickle" \
+            README.md compliance/ prompts/ templates/ \
+            && exit 1 || echo "leak-guard clean"
