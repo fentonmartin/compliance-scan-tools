@@ -1,0 +1,34 @@
+# Prevent accidental commits of secret material and local scan artifacts.
+# (This .gitignore covers the KIT repo itself. Each SCAN REPORT defines its
+# own <EXCLUDED_PATHS> for the TARGET repo under audit.)
+
+# Secret / credential material — never commit
+.env*
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials/
+**/*credential*
+
+# Local scan working files (generated reports at repo root, e.g. SCAN-260904-01.md)
+/tmp/inventory-*.txt
+*.scan-work/
+/SCAN-*.md
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~
+
+# Language build artifacts (kit is docs-only; ignore if examples are added)
+node_modules/
+__pycache__/
+*.pyc
+target/
+dist/
+build/
